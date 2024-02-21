@@ -1,4 +1,4 @@
-import { Plus, Search, FileDown, MoreHorizontal } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Filter } from "lucide-react";
 import { Header } from "./components/header";
 import { Tabs } from "./components/tabs";
 import { Button } from "./components/ui/button";
@@ -11,8 +11,59 @@ import {
   TableHeader,
   TableRow,
 } from "./components/ui/table";
+import { Pagination } from "./components/pagination";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { useState } from "react";
+
+export interface TagResponse {
+  first: number;
+  prev: number | null;
+  next: number;
+  last: number;
+  pages: number;
+  items: number;
+  data: Tag[];
+}
+
+export interface Tag {
+  title: string;
+  slug: string;
+  amountOfVideos: number;
+  id: string;
+}
 
 export function App() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlFilter = searchParams.get("filter") ?? "";
+  const [filter, setFilter] = useState(urlFilter);
+  const page = searchParams.get("page") ? Number(searchParams.get("page")) : 1;
+
+  const { data: tagsResponse, isLoading } = useQuery<TagResponse>({
+    queryKey: ["get-tags", urlFilter, page],
+    queryFn: async () => {
+      const response = await fetch(
+        `http://localhost:3333/tags?_page=${page}&_per_page=10&title=${urlFilter}`
+      );
+      const data = await response.json();
+
+      return data;
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  function handleFilter() {
+    setSearchParams((params) => {
+      params.set("page", "1");
+      params.set("filter", filter);
+
+      return params;
+    });
+  }
+
+  if (isLoading) {
+    return null;
+  }
   return (
     <div className="py-10 space-y-8">
       <div>
@@ -28,16 +79,21 @@ export function App() {
           </Button>
         </div>
         <div className="flex items-center justify-between">
-          <Input variant="filter">
-            <Search className="size-3" />
-            <Control placeholder="Search tags..." />
-          </Input>
-          <Button>
-            <FileDown className="size-3" />
-            Export
-          </Button>
+          <div className="flex items-center gap-3">
+            <Input variant="filter">
+              <Search className="size-3" />
+              <Control
+                placeholder="Search tags..."
+                onChange={(e) => setFilter(e.target.value)}
+                value={filter}
+              />
+            </Input>
+            <Button onClick={handleFilter}>
+              <Filter className="size-3" />
+              Filter
+            </Button>
+          </div>
         </div>
-
         <Table>
           <TableHeader>
             <TableRow>
@@ -48,19 +104,19 @@ export function App() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Array.from({ length: 10 }).map((value, index) => {
+            {tagsResponse?.data.map((tag) => {
               return (
-                <TableRow key={index}>
+                <TableRow key={tag.id}>
                   <TableCell></TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <span className="font-medium">React</span>
-                      <span className="text-xs text-zinc-500 ">
-                        3SDF4-3HSDF-44FHJ4
-                      </span>
+                      <span className="font-medium">{tag.title}</span>
+                      <span className="text-xs text-zinc-500 ">{tag.id}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-zinc-300">13 vídeo(s)</TableCell>
+                  <TableCell className="text-zinc-300">
+                    {tag.amountOfVideos} vídeo(s)
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button size="icon">
                       <MoreHorizontal className="size-4" />
@@ -71,6 +127,13 @@ export function App() {
             })}
           </TableBody>
         </Table>
+        {tagsResponse && (
+          <Pagination
+            pages={tagsResponse.pages}
+            items={tagsResponse.items}
+            page={page}
+          />
+        )}
       </main>
     </div>
   );
